@@ -1,86 +1,94 @@
-# FitCoach · A tu ritmo
+# FitCoach
 
-Frontend navegable para entrenadores personales y sus clientes, diseñado para **390 × 844**, adaptable a móviles y escritorio. Incluye ambas perspectivas y conserva los cambios de la demo en el mismo navegador.
+App para entrenadores personales y sus clientes.
 
-## Tecnología y motivo
+- **Entrenador**: gestiona clientes, asigna ejercicios (con imagen o con un enlace a un vídeo privado de YouTube) y crea la dieta semanal con alimentos, cantidades y receta.
+- **Cliente**: ve su dieta semanal y sus ejercicios, y marca los ejercicios como completados (el progreso se reinicia cada semana).
 
-| Capa                     | Elección                               | Motivo                                                                                                                                                                                            |
-| ------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lenguaje                 | TypeScript                             | Define claramente clientes, ejercicios, comidas y asignaciones, y comprueba incompatibilidades al compilar.                                                                                       |
-| Interfaz                 | React                                  | Permite compartir tarjetas, formularios, tabs, chips, botones y estados entre pantallas.                                                                                                          |
-| Desarrollo y compilación | Vite                                   | Mantiene el prototipo ligero y genera archivos estáticos fáciles de servir.                                                                                                                       |
-| Estilo                   | CSS con variables, Flexbox y Grid      | Reproduce el sistema de diseño y adapta el mismo contenido a móvil y escritorio.                                                                                                                  |
-| Iconos                   | Lucide React                           | Iconografía vectorial consistente y de trazo fino.                                                                                                                                                |
-| Estado                   | Context de React y localStorage        | Permite probar el ciclo entrenador → cliente sin necesitar un servidor.                                                                                                                           |
-| Figma                    | Generador de desarrollo con Plugin API | Recrea los elementos como texto, componentes, vectores y fotos separados, con variables y auto-layout nativos. Requiere ejecutarlo en Figma; no hay un archivo Figma ya generado en esta entrega. |
+Lo que cuelga el entrenador lo ve el cliente al entrar: los datos están compartidos a través del servidor.
 
-Esto es un **prototipo web móvil**. No produce por sí solo un binario iOS/Android. Para la app instalable, una siguiente fase razonable es **React Native + Expo y TypeScript**: se pueden reutilizar los modelos, las reglas de validación y los tokens, y adaptar los componentes visuales a React Native. Este repositorio no incluye un proyecto Expo ni una API.
+## Requisitos
+
+- [Node.js](https://nodejs.org) 22 o superior.
+
+## Arrancar en modo desarrollo
+
+```bash
+npm install
+npm run seed
+npm run dev
+```
+
+`npm run seed` crea las cuentas y datos de ejemplo. Solo hace falta la primera vez (o después de `npm run reset-data`) y se niega a ejecutarse con `NODE_ENV=production`: sin ese paso el servidor arranca con la base de datos vacía.
+
+Abre **http://localhost:5173**. Se arrancan a la vez el servidor (puerto 3001) y la web (puerto 5173).
+
+Para probarla desde el móvil, conéctalo a la misma wifi y abre `http://<IP de tu ordenador>:5173`.
+
+## Cuentas de prueba
+
+| Perfil | Email | Contraseña |
+|---|---|---|
+| Entrenador | `carlos@fitcoach.test` | `entrenador123` |
+| Cliente (con dieta y ejercicios) | `maria@fitcoach.test` | `cliente123` |
+| Clientes sin dieta | `javier@`, `lucia@`, `pablo@fitcoach.test` | `cliente123` |
+
+En desarrollo (`npm run dev`), la pantalla de login muestra un botón «Rellenar automáticamente» con la cuenta de prueba del perfil elegido. El build de producción no incluye ese bloque ni las credenciales.
+
+### Probar el flujo completo
+
+1. Entra como **entrenador** → Clientes → Lucía Martín → **Asignar** un ejercicio con enlace de YouTube o con imagen.
+2. Pestaña **Dietas** → Lucía → **Añadir comida**, alimentos, receta → «Guardar y enviar al cliente».
+3. Cierra sesión (icono arriba a la derecha) y entra como `lucia@fitcoach.test` en el perfil **Cliente**: verás la dieta y el ejercicio, y podrás marcarlo como completado.
+
+## Versión de producción (un solo proceso)
+
+```bash
+npm run build
+npm start
+```
+
+Abre **http://localhost:3001**.
+
+## Datos
+
+Se guardan en `apps/api/data/db.json` (y las imágenes en `apps/api/data/uploads/`). Para volver a empezar con los datos de ejemplo:
+
+```bash
+npm run reset-data
+npm run seed
+```
+
+## Pruebas automáticas del servidor
+
+```bash
+npm test
+```
+
+Cubren el login por perfil, permisos, el flujo entrenador → cliente, la validación de enlaces de YouTube, la subida de imágenes y el alta de clientes.
 
 ## Estructura
 
-```text
-src/
-  App.tsx                    Navegación, perfiles y vista 390 × 844
-  types.ts                   Modelos de datos
-  data.ts                    Datos ficticios y validación de enlaces YouTube
-  store.tsx                  Estado y persistencia de la demo
-  styles.css                 Variables y componentes adaptables
-  components/ui.tsx          Botones, campos, navegación, modales, estados vacíos
-  features/Login.tsx         Acceso y recuperación simulada
-  features/Client.tsx        Dieta, recetas, rutinas, detalles y completado
-  features/Trainer.tsx       Clientes, asignaciones, biblioteca y dieta semanal
-public/assets/               Fotos optimizadas, fuentes locales y SVG
-design/generator-core.js     Generador de Figma legible y editable
-design/figma-plugin/         Plugin listo para añadir a un plugin local de Figma
+```
+apps/
+  api/             API (Express) + persistencia en JSON
+    app.js         rutas y permisos
+    validate.js    validación de datos, enlaces de YouTube e imágenes
+    seed.js        datos de ejemplo
+    test/          pruebas
+  web/             interfaz (React + Vite)
+    src/Login.jsx
+    src/client/    perfil cliente: dieta y ejercicios
+    src/trainer/   perfil entrenador: clientes, ejercicios, dietas
+    src/styles.css paleta oliva y arena del diseño de Figma
+prototype/         prototipo visual inicial y kit de Figma (referencia de diseño)
 ```
 
-## Iniciar
+El repositorio es un workspace de npm: los comandos de la raíz (`npm run dev`, `npm test`, `npm run seed`…) delegan en `apps/api` y `apps/web`. `prototype/` es un proyecto independiente con sus propias dependencias; no forma parte de la aplicación y se conserva como referencia visual (ver `prototype/README.md`).
 
-Requiere una versión de Node compatible con Vite 7.
+## Notas y límites actuales
 
-```bash
-npm ci
-npm run dev
-npm run build
-```
-
-`npm run build` ejecuta la comprobación estricta de TypeScript y genera `dist/`. La navegación de demostración usa el fragmento de la URL.
-
-## Recorrer los flujos
-
-1. En el login elige **Cliente** o **Entrenador**. Los campos contienen datos de ejemplo; no son credenciales de una cuenta real. El login simula la validación, no autentica a una persona.
-2. En cliente, recorre la semana, abre comidas y consulta cantidades, receta y notas. Abre un ejercicio para ver la explicación o el enlace externo y marcarlo completado.
-3. En entrenador, añade clientes, busca por nombre u objetivo y abre su ficha. Crea un ejercicio con imagen o URL de YouTube válida y asígnalo a uno o varios clientes.
-4. En Dietas, elige un cliente y edita cada día. Añade comidas y alimentos, completa receta y cantidades y guarda el plan.
-5. Desde el avatar puedes cambiar de perfil y de cliente de demostración. **Leo Fernández** comienza sin planes, para comprobar ambos estados vacíos.
-6. En escritorio, el control **390 × 844** muestra la vista móvil. **Diseño** muestra la paleta y los estados de componentes.
-
-Los botones “Guardar y enviar” hacen que el plan aparezca dentro de esta demo. No envían correos, mensajes ni notificaciones a otras personas. Todos los datos son ficticios y se guardan únicamente en localStorage. El perfil de cliente no modifica dietas ni asignaciones; solo registra ejercicios completados.
-
-## Figma
-
-Lee [design/FIGMA-LEEME.md](design/FIGMA-LEEME.md). El kit incluye datos y recursos, y funciona sin acceso a internet. Se empaqueta con:
-
-```bash
-node design/build-figma-kit.mjs
-```
-
-La edición directa mediante el conector de Figma quedó bloqueada por el límite de llamadas del plan Starter. Se creó un archivo de trabajo con los cinco recursos fotográficos, pero la construcción de las pantallas fue rechazada antes de ejecutarse. Por eso se entrega el generador local, que no utiliza llamadas MCP. Su ejecución y revisión visual en Figma están pendientes; no se presenta el archivo iniciado como un diseño terminado.
-
-## Límites para producción
-
-Se necesitarían autenticación y permisos reales, base de datos y API, gestión de archivos, recuperación de contraseña y entrega de notificaciones. El selector de perfil es una herramienta de demostración; no constituye una barrera de seguridad.
-
-La privacidad de un vídeo no puede deducirse solo de su URL. Los vídeos privados requieren invitar a los clientes desde YouTube; para vídeos no listados basta con el enlace según la configuración de YouTube. El ejemplo de sentadilla es público y procede de la [biblioteca oficial de NASM](https://www.nasm.org/resource-center/exercise-library/goblet-squat).
-
-## Recursos visuales
-
-Inter: Google Fonts. Iconos: Lucide. Fotografías de Unsplash y fotografía de avena de [Nature's Path](https://naturespath.com/blogs/recipes/vanilla-chia-overnight-oats). Se incluyen localmente para evitar dependencias remotas en la navegación; solo la vista previa opcional de un enlace YouTube consulta su miniatura externa. Las fotografías son ilustrativas y no representan exactamente cada receta de los datos ficticios.
-
-## Verificación
-
-- Compilación de TypeScript y Vite.
-- Revisión de acceso, dieta, recetas, rutinas y completado en navegador.
-- Prueba de validación, asignación múltiple y edición de dieta.
-- Revisión del formato 390 × 844 y de recursos locales.
-- Comprobación sintáctica y de referencias internas del generador de Figma. La revisión de su resultado dentro de Figma está pendiente.
+- Es un prototipo funcional: los datos van a un archivo JSON, sin base de datos real. Para producción habría que pasar a una base de datos (p. ej. PostgreSQL) y servir por HTTPS.
+- La recuperación de contraseña no está implementada: el entrenador fija la contraseña inicial de cada cliente.
+- Los vídeos de YouTube **no se incrustan**: se abren en YouTube. La miniatura solo aparece si el vídeo es público o no listado; en los privados se muestra un fondo liso con el botón de reproducir.
+- Las imágenes se reducen a 1280 px en el navegador antes de subirlas, para mantener la app ligera.

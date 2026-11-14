@@ -1,5 +1,9 @@
 node_modules/
 dist/
+apps/api/data/
 .sites-runtime/
 *.tsbuildinfo
+*.log
+.DS_Store
 .env*
+!.env.example

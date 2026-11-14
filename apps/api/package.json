@@ -1,0 +1,16 @@
+{
+  "name": "@fitcoach/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js",
+    "test": "node --test",
+    "seed": "node run-seed.js",
+    "reset-data": "node reset.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

@@ -215,7 +215,7 @@ export function createApp() {
   app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '1h', fallthrough: false }));
 
   // ---------- frontend compilado (npm run build && npm start) ----------
-  const dist = path.join(__dirname, '..', 'dist');
+  const dist = path.join(__dirname, '..', 'web', 'dist');
   if (fs.existsSync(path.join(dist, 'index.html'))) {
     app.use(express.static(dist));
     app.use((req, res) => res.sendFile(path.join(dist, 'index.html')));
