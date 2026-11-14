@@ -59,6 +59,20 @@ npm run reset-data
 npm run seed
 ```
 
+## Base de datos PostgreSQL (desarrollo)
+
+Requiere [Docker](https://docs.docker.com/get-docker/).
+
+```bash
+cp .env.example .env
+docker compose up -d
+docker compose ps
+```
+
+Levanta PostgreSQL 17 en `localhost:5432` (solo accesible desde tu equipo), con los datos en un volumen de Docker. Para pararlo: `docker compose down`; para borrar también los datos: `docker compose down -v`.
+
+La API todavía guarda los datos en `db.json`; este servicio es la base para la migración a PostgreSQL.
+
 ## Pruebas automáticas del servidor
 
 ```bash
