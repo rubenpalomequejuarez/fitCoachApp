@@ -27,13 +27,25 @@ export function verifyPassword(password, { salt, hash }) {
 
 let db;
 
+const emptyDb = () => ({ users: [], exercises: [], diets: {}, sessions: {} });
+
+export const hasData = () => fs.existsSync(FILE);
+
+// Sin archivo de datos se arranca con una base vacía. Los datos de ejemplo
+// solo se crean de forma explícita con seedDatabase() (npm run seed).
 export function load() {
-  if (fs.existsSync(FILE)) {
-    db = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  } else {
-    db = seed({ uid, hashPassword });
-    save();
+  db = hasData() ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : emptyDb();
+  return db;
+}
+
+// Crea las cuentas y datos de ejemplo. Sus contraseñas son públicas, por lo
+// que nunca debe ejecutarse en producción.
+export function seedDatabase() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Los datos de ejemplo no se pueden crear con NODE_ENV=production');
   }
+  db = seed({ uid, hashPassword });
+  save();
   return db;
 }
 

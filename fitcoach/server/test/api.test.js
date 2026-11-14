@@ -6,6 +6,8 @@ import path from 'node:path';
 
 // Los datos de las pruebas van a una carpeta temporal para no tocar los reales.
 process.env.FITCOACH_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'fitcoach-test-'));
+const { seedDatabase } = await import('../db.js');
+seedDatabase();
 const { createApp } = await import('../app.js');
 
 let server, base;

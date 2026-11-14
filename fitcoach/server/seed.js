@@ -1,4 +1,4 @@
-// Datos de ejemplo que se crean la primera vez que arranca el servidor.
+// Datos de ejemplo para desarrollo y pruebas. Se crean con "npm run seed".
 //
 // Cuentas de prueba:
 //   Entrenador: carlos@fitcoach.test / entrenador123

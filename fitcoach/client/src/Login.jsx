@@ -3,10 +3,14 @@ import { api } from './api.js';
 import { Button, Input, Segmented, Field, useToast } from './ui.jsx';
 import { Icon } from './icons.jsx';
 
-const DEMO = {
-  trainer: { email: 'carlos@fitcoach.test', password: 'entrenador123' },
-  client: { email: 'maria@fitcoach.test', password: 'cliente123' },
-};
+// Cuentas de ejemplo: solo existen en el servidor de desarrollo. En el build
+// de producción import.meta.env.DEV es false y este bloque se elimina.
+const DEMO = import.meta.env.DEV
+  ? {
+      trainer: { email: 'carlos@fitcoach.test', password: 'entrenador123' },
+      client: { email: 'maria@fitcoach.test', password: 'cliente123' },
+    }
+  : null;
 
 export default function Login({ onLogin }) {
   const toast = useToast();
@@ -87,13 +91,15 @@ export default function Login({ onLogin }) {
         ¿Olvidaste tu contraseña?
       </button>
 
-      <div className="demo">
-        <span>Cuenta de prueba ({role === 'trainer' ? 'entrenador' : 'cliente'}):</span>
-        <span><code>{DEMO[role].email}</code> · <code>{DEMO[role].password}</code></span>
-        <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => { setEmail(DEMO[role].email); setPassword(DEMO[role].password); setError(''); }}>
-          Rellenar automáticamente
-        </button>
-      </div>
+      {DEMO && (
+        <div className="demo">
+          <span>Cuenta de prueba ({role === 'trainer' ? 'entrenador' : 'cliente'}):</span>
+          <span><code>{DEMO[role].email}</code> · <code>{DEMO[role].password}</code></span>
+          <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => { setEmail(DEMO[role].email); setPassword(DEMO[role].password); setError(''); }}>
+            Rellenar automáticamente
+          </button>
+        </div>
+      )}
     </form>
   );
 }

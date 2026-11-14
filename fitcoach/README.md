@@ -15,8 +15,11 @@ Lo que cuelga el entrenador lo ve el cliente al entrar: los datos están compart
 
 ```bash
 npm install
+npm run seed
 npm run dev
 ```
+
+`npm run seed` crea las cuentas y datos de ejemplo. Solo hace falta la primera vez (o después de `npm run reset-data`) y se niega a ejecutarse con `NODE_ENV=production`: sin ese paso el servidor arranca con la base de datos vacía.
 
 Abre **http://localhost:5173**. Se arrancan a la vez el servidor (puerto 3001) y la web (puerto 5173).
 
@@ -30,7 +33,7 @@ Para probarla desde el móvil, conéctalo a la misma wifi y abre `http://<IP de 
 | Cliente (con dieta y ejercicios) | `maria@fitcoach.test` | `cliente123` |
 | Clientes sin dieta | `javier@`, `lucia@`, `pablo@fitcoach.test` | `cliente123` |
 
-En la pantalla de login hay un botón «Rellenar automáticamente» con la cuenta de prueba del perfil elegido.
+En desarrollo (`npm run dev`), la pantalla de login muestra un botón «Rellenar automáticamente» con la cuenta de prueba del perfil elegido. El build de producción no incluye ese bloque ni las credenciales.
 
 ### Probar el flujo completo
 
@@ -49,10 +52,11 @@ Abre **http://localhost:3001**.
 
 ## Datos
 
-Se guardan en `server/data/db.json` (y las imágenes en `server/data/uploads/`). La primera vez se crean los datos de ejemplo. Para volver a empezar:
+Se guardan en `server/data/db.json` (y las imágenes en `server/data/uploads/`). Para volver a empezar con los datos de ejemplo:
 
 ```bash
 npm run reset-data
+npm run seed
 ```
 
 ## Pruebas automáticas del servidor
