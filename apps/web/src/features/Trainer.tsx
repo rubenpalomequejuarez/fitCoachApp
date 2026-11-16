@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   ArrowRight,
@@ -42,11 +42,27 @@ import {
   meals as seedMeals,
 } from "../data";
 import { useStore } from "../store";
+import { BarChart3, BookMarked } from "lucide-react";
+import {
+  AssignmentDialog,
+  LibraryTabs,
+  MealPicker,
+  DayChoices,
+  SaveRoutineDialog,
+} from "./Library";
+import { MealEditorCard } from "../components/MealEditorCard";
+import {
+  newId,
+  assignedExercises,
+  personalizeExercise,
+  cloneMeal,
+  copyMenu,
+  mealErrors,
+  matchesSearch,
+  removeAssignedExercise,
+  restoreAssignedExercise,
+} from "../domain";
 import type { Client, Exercise, Meal } from "../types";
-const newId = () =>
-  typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `demo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 export function ClientsView({ onClient }: { onClient: (id: string) => void }) {
   const { data, setData, notify } = useStore();
   const [search, setSearch] = useState("");
@@ -56,7 +72,7 @@ export function ClientsView({ onClient }: { onClient: (id: string) => void }) {
   const [goal, setGoal] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const filtered = data.clients.filter((c) =>
-    `${c.name} ${c.goal}`.toLowerCase().includes(search.toLowerCase()),
+    matchesSearch(search, c.name, c.goal),
   );
   function save(e: FormEvent) {
     e.preventDefault();
@@ -136,7 +152,7 @@ export function ClientsView({ onClient }: { onClient: (id: string) => void }) {
           </span>
           <div>
             <strong>
-              {data.clients.filter((c) => c.exerciseIds.length).length}
+              {data.clients.filter((c) => assignedExercises(c).length).length}
             </strong>
             <span>Con rutina asignada</span>
           </div>
@@ -183,9 +199,9 @@ export function ClientsView({ onClient }: { onClient: (id: string) => void }) {
             <p>{c.goal}</p>
             <div className="client-card-bottom">
               <span
-                className={`status-dot ${c.exerciseIds.length ? "" : "pending"}`}
+                className={`status-dot ${assignedExercises(c).length ? "" : "pending"}`}
               />
-              {c.exerciseIds.length ? "Plan en marcha" : "Por preparar"}
+              {assignedExercises(c).length ? "Plan en marcha" : "Por preparar"}
               <span>
                 {c.joined === "Nuevo cliente"
                   ? "Nuevo"
@@ -260,16 +276,56 @@ export function ClientProfile({
   onExerciseEdit,
   onDietEdit,
   onExercise,
+  onProgress,
 }: {
   client: Client;
   onBack: () => void;
   onExerciseEdit: (e?: Exercise) => void;
   onDietEdit: () => void;
+  onProgress: () => void;
   onExercise: (e: Exercise) => void;
 }) {
-  const { data } = useStore();
-  const list = data.exercises.filter((e) => client.exerciseIds.includes(e.id));
+  const { setData } = useStore();
+  const [removed, setRemoved] = useState<{
+    clientId: string;
+    exercise: Exercise;
+    index: number;
+  } | null>(null);
+  const [focusTarget, setFocusTarget] = useState("");
+  const [routineDay, setRoutineDay] = useState<number | null>(null);
+  const list = assignedExercises(client);
+  const lastRemoved =
+    removed &&
+    removed.clientId === client.id &&
+    !list.some((e) => e.id === removed.exercise.id)
+      ? removed
+      : null;
+  const displayList = [...list];
+  if (lastRemoved) displayList.splice(lastRemoved.index, 0, lastRemoved.exercise);
   const days = Object.values(client.diets).filter((m) => m.length).length;
+  useEffect(() => {
+    if (focusTarget) {
+      document.getElementById(focusTarget)?.focus({ preventScroll: true });
+    }
+  }, [focusTarget]);
+
+  function removeExercise(exercise: Exercise) {
+    setRemoved({
+      clientId: client.id,
+      exercise: structuredClone(exercise),
+      index: list.findIndex((e) => e.id === exercise.id),
+    });
+    setData((data) => removeAssignedExercise(data, client.id, exercise.id));
+    setFocusTarget(`undo-${exercise.id}`);
+  }
+
+  function undoRemoval() {
+    if (!lastRemoved) return;
+    const { clientId, exercise, index } = lastRemoved;
+    setData((data) => restoreAssignedExercise(data, clientId, exercise, index));
+    setRemoved(null);
+    setFocusTarget(`remove-${exercise.id}`);
+  }
   return (
     <>
       <Back onClick={onBack} label="Todos los clientes" />
@@ -294,6 +350,20 @@ export function ClientProfile({
           <strong>{client.goal}</strong>
         </div>
       </div>
+      <button
+        type="button"
+        className="client-progress-link"
+        onClick={onProgress}
+      >
+        <span>
+          <BarChart3 size={23} />
+        </span>
+        <div>
+          <strong>Progreso y esfuerzo</strong>
+          <small>Sesiones, RPE y evolución de la carga</small>
+        </div>
+        <ArrowRight size={19} />
+      </button>
       <div className="profile-sections">
         <section className="profile-section">
           <div className="profile-section-heading">
@@ -309,15 +379,75 @@ export function ClientProfile({
               Editar
             </Button>
           </div>
-          {list.length ? (
+          {displayList.length ? (
             <>
-              {list.map((e) => (
-                <ExerciseCard
-                  key={e.id}
-                  exercise={e}
-                  onClick={() => onExercise(e)}
-                />
-              ))}
+              {FULL_DAYS.map((day, dayIndex) => {
+                const exercises = displayList.filter((e) => e.day === dayIndex);
+                return exercises.length ? (
+                  <div className="assigned-day-group" key={day}>
+                    <div className="assigned-day-heading">
+                      <h3 className="assigned-day-title">{day}</h3>
+                      {list.some((exercise) => exercise.day === dayIndex) && (
+                        <button
+                          type="button"
+                          className="text-link"
+                          aria-label={`Guardar ejercicios del ${day.toLowerCase()} como rutina`}
+                          onClick={() => setRoutineDay(dayIndex)}
+                        >
+                          <BookMarked size={14} />
+                          Guardar día como rutina
+                        </button>
+                      )}
+                    </div>
+                    {exercises.map((e) =>
+                      lastRemoved?.exercise.id === e.id ? (
+                        <div className="assignment-undo" key={e.id} role="status">
+                          <div>
+                            <strong>{e.name}</strong>
+                            <p>Retirado del plan de {client.name.split(" ")[0]}.</p>
+                          </div>
+                          <button
+                            id={`undo-${e.id}`}
+                            type="button"
+                            className="text-link"
+                            aria-label={`Deshacer retirada de ${e.name}`}
+                            onClick={undoRemoval}
+                          >
+                            Deshacer
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="assigned-exercise-row" key={e.id}>
+                          <ExerciseCard
+                            exercise={e}
+                            onClick={() => onExercise(e)}
+                          />
+                          <div className="assigned-exercise-actions">
+                            <button
+                              type="button"
+                              className="text-link"
+                              onClick={() => onExerciseEdit(e)}
+                            >
+                              <PenLine size={14} />
+                              Ajustar solo para {client.name.split(" ")[0]}
+                            </button>
+                            <button
+                              id={`remove-${e.id}`}
+                              type="button"
+                              className="text-link"
+                              aria-label={`Quitar ${e.name} del ${day.toLowerCase()} de ${client.name}`}
+                              onClick={() => removeExercise(e)}
+                            >
+                              <Trash2 size={14} />
+                              Quitar del plan
+                            </button>
+                          </div>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                ) : null;
+              })}
               <Button
                 variant="secondary"
                 onClick={() => onExerciseEdit()}
@@ -407,106 +537,12 @@ export function ClientProfile({
           )}
         </section>
       </div>
-    </>
-  );
-}
-export function ExerciseLibrary({
-  onCreate,
-  onExercise,
-}: {
-  onCreate: () => void;
-  onExercise: (e: Exercise) => void;
-}) {
-  const { data } = useStore();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("Todos");
-  const groups = ["Todos", ...new Set(data.exercises.map((e) => e.group))];
-  const filtered = data.exercises.filter(
-    (e) =>
-      e.name.toLowerCase().includes(search.toLowerCase()) &&
-      (filter === "Todos" || e.group === filter),
-  );
-  return (
-    <>
-      <PageTitle
-        eyebrow="TU BIBLIOTECA DE MOVIMIENTO"
-        title={
-          <>
-            Entrenar con intención<span className="olive-dot">.</span>
-          </>
-        }
-        subtitle="Ejercicios que se adaptan a cada persona."
-        action={
-          <Button onClick={onCreate} icon={<Plus size={18} />}>
-            Crear ejercicio
-          </Button>
-        }
-      />
-      <div className="library-toolbar">
-        <SearchField
-          value={search}
-          onChange={setSearch}
-          placeholder="Buscar ejercicio"
-        />
-        <div className="filter-chips">
-          {groups.map((g) => (
-            <button
-              className={filter === g ? "active" : ""}
-              key={g}
-              onClick={() => setFilter(g)}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="exercise-library-grid">
-        {filtered.map((e) => (
-          <button
-            key={e.id}
-            className="library-exercise"
-            onClick={() => onExercise(e)}
-          >
-            <div className="library-exercise-image">
-              <img
-                src={
-                  e.image.startsWith("data:") ? e.image : `/assets/${e.image}`
-                }
-                alt=""
-              />
-              {e.resource === "video" && (
-                <span className="chip">
-                  <Play size={12} />
-                  Vídeo
-                </span>
-              )}
-              <span className="library-open">
-                <ArrowRight size={18} />
-              </span>
-            </div>
-            <div className="library-exercise-text">
-              <span className="eyebrow">{e.group.toUpperCase()}</span>
-              <h3>{e.name}</h3>
-              <p>
-                {e.sets} × {e.reps}
-                <span>·</span>
-                <Clock size={13} />
-                {e.rest} s descanso
-              </p>
-            </div>
-          </button>
-        ))}
-      </div>
-      {!filtered.length && (
-        <EmptyState
-          type="exercise"
-          title="Aquí hay espacio para algo nuevo"
-          description="Prueba otra búsqueda o crea un ejercicio."
-          action={
-            <Button variant="secondary" onClick={onCreate}>
-              Crear ejercicio
-            </Button>
-          }
+      {routineDay !== null && (
+        <SaveRoutineDialog
+          exercises={list.filter((exercise) => exercise.day === routineDay)}
+          initialName={`Rutina del ${FULL_DAYS[routineDay].toLowerCase()}`}
+          onClose={() => setRoutineDay(null)}
+          onSaved={() => setRoutineDay(null)}
         />
       )}
     </>
@@ -539,16 +575,9 @@ export function ExerciseForm({
   const [image, setImage] = useState(exercise?.image || "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [assign, setAssign] = useState(false);
-  const [selected, setSelected] = useState<string[]>(
-    initialClientId
-      ? [initialClientId]
-      : exercise
-        ? data.clients
-            .filter((c) => c.exerciseIds.includes(exercise.id))
-            .map((c) => c.id)
-        : [],
-  );
-  const [query, setQuery] = useState("");
+  const personal = !!(initialClientId && exercise?.sourceId);
+  const owner = data.clients.find((c) => c.id === initialClientId);
+  const [prepared, setPrepared] = useState<Exercise | null>(null);
   const videoId = youtubeId(url);
   function validate(e: FormEvent) {
     e.preventDefault();
@@ -566,13 +595,10 @@ export function ExerciseForm({
     if (resource === "image" && !image)
       er.image = "Sube una imagen para explicar el ejercicio.";
     setErrors(er);
-    if (!Object.keys(er).length) setAssign(true);
-  }
-  function save() {
-    if (!selected.length) return;
-    const id = exercise?.id || newId();
+    if (Object.keys(er).length) return;
     const item: Exercise = {
-      id,
+      id: exercise?.id || newId(),
+      sourceId: exercise?.sourceId,
       name: name.trim(),
       sets: +sets,
       reps: reps.trim(),
@@ -585,29 +611,48 @@ export function ExerciseForm({
       image: resource === "image" ? image : "squat.svg",
       group: group.trim() || "Rutina personalizada",
     };
+    if (personal && initialClientId) {
+      setData((d) => personalizeExercise(d, initialClientId, item));
+      notify(
+        `Ejercicio adaptado solo para ${owner?.name.split(" ")[0] || "este cliente"}.`,
+      );
+      onSaved();
+      return;
+    }
+    const intent = (e.nativeEvent as SubmitEvent).submitter?.getAttribute(
+      "data-action",
+    );
+    if (intent === "assign") {
+      setPrepared(item);
+      setAssign(true);
+      return;
+    }
     setData((d) => ({
       ...d,
       exercises: exercise
-        ? d.exercises.map((e) => (e.id === id ? item : e))
+        ? d.exercises.map((x) => (x.id === item.id ? item : x))
         : [...d.exercises, item],
-      clients: d.clients.map((c) =>
-        selected.includes(c.id)
-          ? { ...c, exerciseIds: [...new Set([...c.exerciseIds, id])] }
-          : c,
-      ),
     }));
-    setAssign(false);
     notify(
-      `Ejercicio ${exercise ? "actualizado y " : ""}asignado a ${selected.length} ${selected.length === 1 ? "cliente" : "clientes"}.`,
+      "Ejercicio guardado en tu biblioteca. Las asignaciones conservan sus ajustes.",
     );
     onSaved();
   }
   return (
     <>
-      <Back onClick={onBack} label="Volver a ejercicios" />
+      <Back
+        onClick={onBack}
+        label={personal ? "Volver al cliente" : "Volver a ejercicios"}
+      />
       <PageTitle
         eyebrow="MOVIMIENTO A SU MEDIDA"
-        title={exercise ? "Editar ejercicio" : "Crear un ejercicio"}
+        title={
+          personal
+            ? "Adaptar ejercicio"
+            : exercise
+              ? "Editar ejercicio de biblioteca"
+              : "Crear un ejercicio"
+        }
         subtitle="Una buena explicación marca la diferencia."
       />
       <form className="editor-layout" noValidate onSubmit={validate}>
@@ -806,93 +851,65 @@ export function ExerciseForm({
             )}
           </div>
           <div className="editor-save">
-            <span className="eyebrow">UN PASO MÁS</span>
-            <p>Selecciona quién recibirá este ejercicio.</p>
-            <Button variant="accent" type="submit" icon={<Users size={18} />}>
-              Asignar a cliente
-              <ArrowRight size={17} />
+            <span className="eyebrow">
+              {personal
+                ? `SOLO PARA ${owner?.name.split(" ")[0].toUpperCase()}`
+                : "PREPARADO PARA REUTILIZAR"}
+            </span>
+            <p>
+              {personal
+                ? "Estos cambios se aplican a esta asignación del cliente."
+                : "Guarda el ejercicio como base o asígnalo directamente a uno o varios clientes."}
+            </p>
+            <Button
+              variant={personal ? "accent" : "primary"}
+              type="submit"
+              data-action="save"
+              icon={personal ? <PenLine size={17} /> : <BookMarked size={17} />}
+            >
+              {personal
+                ? "Guardar cambios del cliente"
+                : "Guardar en biblioteca"}
             </Button>
+            {!personal && (
+              <Button
+                variant="accent"
+                type="submit"
+                data-action="assign"
+                icon={<Users size={17} />}
+              >
+                Guardar y asignar
+              </Button>
+            )}
           </div>
         </aside>
       </form>
-      {assign && (
-        <Modal
-          title="¿A quién acompañamos?"
+      {assign && prepared && (
+        <AssignmentDialog
+          exerciseItems={[prepared]}
+          initialClientId={initialClientId}
+          saveToLibrary
           onClose={() => setAssign(false)}
-          footer={
-            <Button
-              variant="accent"
-              disabled={!selected.length}
-              onClick={save}
-              icon={<Send size={17} />}
-            >
-              Asignar a {selected.length || ""}{" "}
-              {selected.length === 1 ? "cliente" : "clientes"}
-            </Button>
-          }
-        >
-          <p>
-            El ejercicio se añadirá a sus rutinas para el{" "}
-            {FULL_DAYS[day].toLowerCase()}.
-          </p>
-          <SearchField
-            placeholder="Buscar clientes"
-            value={query}
-            onChange={setQuery}
-          />
-          <div className="select-all">
-            <button
-              onClick={() =>
-                setSelected(
-                  selected.length === data.clients.length
-                    ? []
-                    : data.clients.map((c) => c.id),
-                )
-              }
-            >
-              {selected.length === data.clients.length
-                ? "Quitar selección"
-                : "Seleccionar todos"}
-            </button>
-            <span>{selected.length} seleccionados</span>
-          </div>
-          <div className="client-selector">
-            {data.clients
-              .filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
-              .map((c) => (
-                <label key={c.id}>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(c.id)}
-                    onChange={() =>
-                      setSelected((s) =>
-                        s.includes(c.id)
-                          ? s.filter((x) => x !== c.id)
-                          : [...s, c.id],
-                      )
-                    }
-                  />
-                  <Avatar client={c} />
-                  <span>
-                    <strong>{c.name}</strong>
-                    <small>{c.goal}</small>
-                  </span>
-                  <span className="selection-check">
-                    {selected.includes(c.id) && <Check size={16} />}
-                  </span>
-                </label>
-              ))}
-          </div>
-        </Modal>
+          onAssigned={() => {
+            setAssign(false);
+            onSaved();
+          }}
+        />
       )}
     </>
   );
 }
-export function DietsView({ onEdit }: { onEdit: (id: string) => void }) {
+export function DietsView({
+  onEdit,
+  onLibrary,
+}: {
+  onEdit: (id: string) => void;
+  onLibrary: () => void;
+}) {
   const { data } = useStore();
   const [search, setSearch] = useState("");
   const list = data.clients.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()),
+    matchesSearch(search, c.name),
   );
   return (
     <>
@@ -905,6 +922,7 @@ export function DietsView({ onEdit }: { onEdit: (id: string) => void }) {
         }
         subtitle="Planes sencillos, personalizados y fáciles de seguir."
       />
+      <LibraryTabs kind="meal" active="plans" onChange={onLibrary} />
       <div className="list-toolbar">
         <h2>Planes de tus clientes</h2>
         <SearchField
@@ -956,13 +974,13 @@ export function DietsView({ onEdit }: { onEdit: (id: string) => void }) {
     </>
   );
 }
-const blankMeal = (day: number): Meal => ({
+const blankMeal = (index: number): Meal => ({
   id: newId(),
-  type: "Desayuno",
+  type: MEAL_TYPES[index % 5],
   name: "",
   kcal: 0,
   summary: "",
-  image: seedMeals[0].image,
+  image: seedMeals[index % 5].image,
   ingredients: [{ name: "", quantity: "" }],
   recipe: "",
   notes: "",
@@ -983,50 +1001,107 @@ export function DietEditor({
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const [copy, setCopy] = useState(false);
+  const [targets, setTargets] = useState<number[]>([]);
+  const [replace, setReplace] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [validationAttempt, setValidationAttempt] = useState(0);
+  const [duplicatedId, setDuplicatedId] = useState("");
   const list = week[day] || [];
   const total = list.reduce((s, m) => s + (m.kcal || 0), 0);
+  const days = Object.values(week).filter((ms) => ms.length).length;
+  useEffect(() => {
+    if (!validationAttempt) return;
+    const form = formRef.current;
+    const target =
+      form?.querySelector<HTMLElement>('[aria-invalid="true"]') ||
+      form?.querySelector<HTMLButtonElement>(".add-meal");
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "center" });
+  }, [validationAttempt]);
+  useEffect(() => {
+    if (!duplicatedId) return;
+    const target = formRef.current?.querySelector<HTMLInputElement>(
+      `[data-meal-id="${duplicatedId}"] input`,
+    );
+    target?.focus({ preventScroll: true });
+    target?.select();
+    target?.scrollIntoView({ block: "center" });
+  }, [duplicatedId]);
+  function duplicateMeal(meal: Meal) {
+    const copy = {
+      ...cloneMeal(meal),
+      name: meal.name.trim() ? `${meal.name} (copia)` : "",
+    };
+    setWeek((week) => ({
+      ...week,
+      [day]: (week[day] || []).flatMap((item) =>
+        item.id === meal.id ? [item, copy] : [item],
+      ),
+    }));
+    setDuplicatedId(copy.id);
+    notify("Comida duplicada en el borrador. Puedes adaptar esta copia.");
+  }
   function update(id: string, patch: Partial<Meal>) {
     setWeek((w) => ({
       ...w,
-      [day]: (w[day] || []).map((m) => (m.id === id ? { ...m, ...patch } : m)),
+      [day]: (w[day] || []).map((m) =>
+        m.id === id
+          ? {
+              ...m,
+              ...patch,
+              summary: (patch.ingredients || m.ingredients)
+                .map((i) => i.name)
+                .join(" · "),
+            }
+          : m,
+      ),
     }));
   }
   function validate(e: FormEvent) {
     e.preventDefault();
     const er: Record<string, string> = {};
     let first: number | null = null;
-    for (const [d, ms] of Object.entries(week))
-      for (const m of ms) {
-        if (!m.name.trim()) er[`${m.id}-name`] = "Añade el nombre del plato.";
-        if (!m.recipe.trim())
-          er[`${m.id}-recipe`] = "Explica la receta paso a paso.";
-        if (
-          !m.ingredients.length ||
-          m.ingredients.some((i) => !i.name.trim() || !i.quantity.trim())
-        )
-          er[`${m.id}-ingredients`] =
-            "Completa el nombre y la cantidad de cada alimento.";
-        if (!Number.isFinite(m.kcal) || m.kcal < 0)
-          er[`${m.id}-kcal`] = "Las calorías deben ser un número positivo.";
-        if (first === null && Object.keys(er).some((k) => k.startsWith(m.id)))
-          first = +d;
+    for (const [d, items] of Object.entries(week))
+      for (const m of items) {
+        const issues = mealErrors(m);
+        for (const [k, v] of Object.entries(issues)) er[m.id + "|" + k] = v;
+        if (Object.keys(issues).length && first === null) first = +d;
       }
     if (!Object.values(week).some((ms) => ms.length))
       er.empty = "Añade al menos una comida antes de guardar.";
     setErrors(er);
     if (first !== null) setDay(first);
-    if (!Object.keys(er).length) setConfirm(true);
+    if (Object.keys(er).length) {
+      setValidationAttempt((attempt) => attempt + 1);
+    } else {
+      setConfirm(true);
+    }
   }
   function save() {
     setData((d) => ({
       ...d,
       clients: d.clients.map((c) =>
-        c.id === client.id ? { ...c, diets: week } : c,
+        c.id === client.id ? { ...c, diets: structuredClone(week) } : c,
       ),
     }));
     setConfirm(false);
     notify(`Dieta guardada y disponible para ${client.name.split(" ")[0]}.`);
     onSaved();
+  }
+  function toLibrary(meal: Meal) {
+    if (Object.keys(mealErrors(meal)).length) {
+      notify(
+        "Completa el plato, sus cantidades y la receta antes de guardarlo como base.",
+      );
+      return;
+    }
+    const item = { ...cloneMeal(meal), sourceId: undefined };
+    setData((d) => ({ ...d, mealLibrary: [...d.mealLibrary, item] }));
+    notify(
+      "Copia guardada en tu biblioteca. El menú del cliente conserva sus ajustes.",
+    );
   }
   return (
     <>
@@ -1034,9 +1109,9 @@ export function DietEditor({
       <PageTitle
         eyebrow={`UN PLAN PARA ${client.name.split(" ")[0].toUpperCase()}`}
         title="Una semana en equilibrio"
-        subtitle="Organiza las comidas. Deja espacio para disfrutar."
+        subtitle="Añade tus platos y adapta cada ración a su día a día."
       />
-      <form className="diet-editor" onSubmit={validate} noValidate>
+      <form ref={formRef} className="diet-editor" onSubmit={validate} noValidate>
         <div className="diet-editor-bar">
           <DayStrip day={day} onChange={setDay} compact />
           <div className="plan-day-summary">
@@ -1054,184 +1129,62 @@ export function DietEditor({
           <button
             type="button"
             className="text-link"
-            onClick={() => {
-              if (!list.length) return;
-              setWeek((w) =>
-                Object.fromEntries(
-                  DAYS.map((_, i) => [
-                    i,
-                    i === day
-                      ? w[i]
-                      : list.map((m) => ({
-                          ...structuredClone(m),
-                          id: newId(),
-                        })),
-                  ]),
-                ),
-              );
-              notify("Menú copiado al resto de días. Revisa y guarda el plan.");
-            }}
             disabled={!list.length}
+            onClick={() => {
+              setTargets([]);
+              setReplace(false);
+              setCopy(true);
+            }}
           >
             <Copy size={15} />
-            Copiar al resto de días
+            Copiar menú a otros días
           </button>
+        </div>
+        <div className="diet-library-shortcut">
+          <span>
+            <BookOpen size={23} />
+          </span>
+          <div>
+            <strong>Tu biblioteca, al alcance</strong>
+            <p>Elige varios platos y ajusta sus cantidades aquí.</p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => setPicker(true)}
+            icon={<Plus size={16} />}
+          >
+            Añadir desde biblioteca
+          </Button>
         </div>
         {list.length ? (
           <div className="meal-editors">
             {list.map((m, index) => (
-              <section className="meal-editor" key={m.id}>
-                <header>
-                  <span className="meal-number">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div className="field">
-                    <label htmlFor={`type-${m.id}`}>Momento del día</label>
-                    <select
-                      id={`type-${m.id}`}
-                      value={m.type}
-                      onChange={(e) => {
-                        const type = e.target.value;
-                        update(m.id, {
-                          type,
-                          image:
-                            seedMeals.find((x) => x.type === type)?.image ||
-                            "bowl.jpg",
-                        });
-                      }}
-                    >
-                      {MEAL_TYPES.map((t) => (
-                        <option key={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button
-                    type="button"
-                    className="icon-button delete-button"
-                    aria-label={`Eliminar ${m.type}`}
-                    onClick={() =>
-                      setWeek((w) => ({
-                        ...w,
-                        [day]: w[day].filter((x) => x.id !== m.id),
-                      }))
-                    }
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </header>
-                <div className="meal-editor-fields">
-                  <Field
-                    label="Nombre del plato"
-                    placeholder="Ej. Avena con frutos rojos"
-                    value={m.name}
-                    onChange={(e) => update(m.id, { name: e.target.value })}
-                    error={errors[`${m.id}-name`]}
-                  />
-                  <Field
-                    label="Calorías (opcional)"
-                    type="number"
-                    min="0"
-                    value={m.kcal || ""}
-                    placeholder="kcal"
-                    onChange={(e) => update(m.id, { kcal: +e.target.value })}
-                    error={errors[`${m.id}-kcal`]}
-                  />
-                </div>
-                <div className="ingredients-editor">
-                  <div className="ingredients-label">
-                    <span>Alimentos</span>
-                    <span>Cantidad</span>
-                  </div>
-                  {m.ingredients.map((x, i) => (
-                    <div className="ingredient-fields" key={i}>
-                      <input
-                        aria-label={`Alimento ${i + 1} de ${m.type}`}
-                        placeholder="Ej. Copos de avena"
-                        value={x.name}
-                        onChange={(e) =>
-                          update(m.id, {
-                            ingredients: m.ingredients.map((v, j) =>
-                              j === i ? { ...v, name: e.target.value } : v,
-                            ),
-                          })
-                        }
-                      />
-                      <input
-                        aria-label={`Cantidad del alimento ${i + 1} de ${m.type}`}
-                        placeholder="60 g"
-                        value={x.quantity}
-                        onChange={(e) =>
-                          update(m.id, {
-                            ingredients: m.ingredients.map((v, j) =>
-                              j === i ? { ...v, quantity: e.target.value } : v,
-                            ),
-                          })
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={`Quitar alimento ${i + 1}`}
-                        onClick={() =>
-                          update(m.id, {
-                            ingredients: m.ingredients.filter(
-                              (_, j) => j !== i,
-                            ),
-                          })
-                        }
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  ))}
-                  {errors[`${m.id}-ingredients`] && (
-                    <p className="error-text" role="alert">
-                      {errors[`${m.id}-ingredients`]}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    className="text-link"
-                    onClick={() =>
-                      update(m.id, {
-                        ingredients: [
-                          ...m.ingredients,
-                          { name: "", quantity: "" },
-                        ],
-                      })
-                    }
-                  >
-                    <Plus size={15} />
-                    Añadir alimento
-                  </button>
-                </div>
-                <TextArea
-                  label="Receta paso a paso"
-                  placeholder="Un paso por línea…"
-                  rows={3}
-                  value={m.recipe}
-                  onChange={(e) => update(m.id, { recipe: e.target.value })}
-                />
-                {errors[`${m.id}-recipe`] && (
-                  <p className="error-text" role="alert">
-                    {errors[`${m.id}-recipe`]}
-                  </p>
+              <MealEditorCard
+                key={m.id}
+                meal={m}
+                index={index}
+                onChange={(patch) => update(m.id, patch)}
+                onDuplicate={() => duplicateMeal(m)}
+                onDelete={() =>
+                  setWeek((w) => ({
+                    ...w,
+                    [day]: w[day].filter((x) => x.id !== m.id),
+                  }))
+                }
+                onSaveToLibrary={() => toLibrary(m)}
+                errors={Object.fromEntries(
+                  Object.entries(errors)
+                    .filter(([k]) => k.startsWith(m.id + "|"))
+                    .map(([k, v]) => [k.slice(m.id.length + 1), v]),
                 )}
-                <TextArea
-                  label="Notas del entrenador (opcional)"
-                  placeholder="Alternativas, preparación o algún consejo…"
-                  rows={2}
-                  value={m.notes}
-                  onChange={(e) => update(m.id, { notes: e.target.value })}
-                />
-              </section>
+              />
             ))}
           </div>
         ) : (
           <EmptyState
             type="diet"
             title="Un día lleno de posibilidades"
-            description="Añade la primera comida y empieza a preparar el menú."
+            description="Selecciona platos de tu biblioteca o crea una comida para este cliente."
           />
         )}
         <button
@@ -1240,19 +1193,12 @@ export function DietEditor({
           onClick={() =>
             setWeek((w) => ({
               ...w,
-              [day]: [
-                ...(w[day] || []),
-                {
-                  ...blankMeal(day),
-                  type: MEAL_TYPES[list.length % 5],
-                  image: seedMeals[list.length % 5].image,
-                },
-              ],
+              [day]: [...(w[day] || []), blankMeal(list.length)],
             }))
           }
         >
           <Plus size={20} />
-          Añadir comida<span>{FULL_DAYS[day]}</span>
+          Crear comida para este cliente<span>{FULL_DAYS[day]}</span>
         </button>
         {errors.empty && (
           <p className="error-text" role="alert">
@@ -1262,14 +1208,76 @@ export function DietEditor({
         <div className="diet-save-bar">
           <span>
             <Leaf size={17} />
-            {Object.values(week).filter((ms) => ms.length).length} de 7 días
-            preparados
+            {days} de 7 días preparados
           </span>
           <Button variant="accent" type="submit" icon={<Send size={17} />}>
             Guardar y enviar al cliente
           </Button>
         </div>
       </form>
+      {picker && (
+        <MealPicker
+          onClose={() => setPicker(false)}
+          onPick={(items) => {
+            setWeek((w) => ({ ...w, [day]: [...(w[day] || []), ...items] }));
+            setPicker(false);
+            notify(
+              `${items.length} ${items.length === 1 ? "plato añadido" : "platos añadidos"} al borrador del ${FULL_DAYS[day].toLowerCase()}.`,
+            );
+          }}
+        />
+      )}
+      {copy && (
+        <Modal
+          title={`Copiar el menú del ${FULL_DAYS[day].toLowerCase()}`}
+          onClose={() => setCopy(false)}
+          footer={
+            <Button
+              disabled={!targets.length}
+              onClick={() => {
+                setWeek((w) => copyMenu(w, day, targets, replace));
+                setCopy(false);
+                notify(
+                  "Menús copiados. Puedes adaptar cada día antes de guardar.",
+                );
+              }}
+              icon={<Copy size={17} />}
+            >
+              Copiar a {targets.length || ""}{" "}
+              {targets.length === 1 ? "día" : "días"}
+            </Button>
+          }
+        >
+          <p>{list.length} comidas. Cada día recibe su propia copia.</p>
+          <DayChoices selected={targets} onChange={setTargets} exclude={day} />
+          <div className="copy-options">
+            <label>
+              <input
+                type="radio"
+                name="copy-mode"
+                checked={!replace}
+                onChange={() => setReplace(false)}
+              />
+              <span>
+                <strong>Añadir al menú actual</strong>
+                <small>Conserva las comidas de los días elegidos.</small>
+              </span>
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="copy-mode"
+                checked={replace}
+                onChange={() => setReplace(true)}
+              />
+              <span>
+                <strong>Sustituir el menú de esos días</strong>
+                <small>Reemplaza sus comidas dentro de este borrador.</small>
+              </span>
+            </label>
+          </div>
+        </Modal>
+      )}
       {confirm && (
         <Modal
           title="Su semana está lista"
@@ -1284,23 +1292,18 @@ export function DietEditor({
             <Avatar client={client} size="lg" />
             <h3>{client.name}</h3>
             <p>
-              {Object.values(week).filter((ms) => ms.length).length}{" "}
-              {Object.values(week).filter((ms) => ms.length).length === 1
-                ? "día"
-                : "días"}{" "}
-              · {Object.values(week).reduce((s, m) => s + m.length, 0)}{" "}
-              {Object.values(week).reduce((s, m) => s + m.length, 0) === 1
-                ? "comida"
-                : "comidas"}
+              {days} {days === 1 ? "día" : "días"} ·{" "}
+              {Object.values(week).reduce((s, m) => s + m.length, 0)} comidas
             </p>
           </div>
           <p>
-            El plan sustituirá su dieta semanal actual y estará disponible en su
-            perfil de cliente.
+            El plan sustituirá su dieta semanal actual. Cada plato conserva las
+            cantidades y notas que has adaptado para {client.name.split(" ")[0]}
+            .
           </p>
           <p className="form-hint">
-            Demostración: la entrega ocurre dentro de esta app. No se envía
-            email ni notificación externa.
+            Demostración: el plan se actualiza en este navegador. No se envían
+            mensajes externos.
           </p>
         </Modal>
       )}

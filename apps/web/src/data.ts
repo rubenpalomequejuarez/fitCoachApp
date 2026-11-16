@@ -1,4 +1,5 @@
 import type { AppData, Meal } from "./types";
+import { demoSessions } from "./domain";
 export const DAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 export const FULL_DAYS = [
   "Lunes",
@@ -268,7 +269,31 @@ export const initialData: AppData = {
     },
   ],
   completed: {},
+  mealLibrary: meals.map((m) => ({
+    ...structuredClone(m),
+    id: `dish-${m.id}`,
+  })),
+  routines: [],
+  sessionLogs: [],
+  schemaVersion: 2,
 };
+initialData.routines = [
+  {
+    id: "routine-leg",
+    name: "Pierna y glúteo",
+    exercises: structuredClone(
+      initialData.exercises.filter((e) => e.day === 0),
+    ),
+  },
+  {
+    id: "routine-upper",
+    name: "Tren superior",
+    exercises: structuredClone(
+      initialData.exercises.filter((e) => e.day === 2),
+    ),
+  },
+];
+initialData.sessionLogs = demoSessions(initialData.clients);
 export const youtubeId = (value: string) => {
   try {
     const u = new URL(value);

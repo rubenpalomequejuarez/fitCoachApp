@@ -7,15 +7,13 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently -k -n api,web -c green,yellow \"npm run dev -w @fitcoach/api\" \"npm run dev -w @fitcoach/web\"",
+    "dev": "npm run dev -w @fitcoach/web",
+    "dev:api": "npm run dev -w @fitcoach/api",
     "build": "npm run build -w @fitcoach/web",
     "start": "npm start -w @fitcoach/api",
-    "test": "npm test -w @fitcoach/api",
+    "test": "npm test --workspaces --if-present",
     "seed": "npm run seed -w @fitcoach/api",
     "reset-data": "npm run reset-data -w @fitcoach/api"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
   },
   "engines": {
     "node": ">=22"

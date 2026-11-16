@@ -5,10 +5,20 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as icons from "lucide-react";
 const root = process.cwd();
-const code = ts.transpileModule(
-  fs.readFileSync(path.join(root, "src/data.ts"), "utf8"),
+const domainCode = ts.transpileModule(
+  fs.readFileSync(path.join(root, "src/domain.ts"), "utf8"),
   { compilerOptions: { module: ts.ModuleKind.ESNext } },
 ).outputText;
+const domainURL =
+  "data:text/javascript;base64," + Buffer.from(domainCode).toString("base64");
+const code = ts
+  .transpileModule(fs.readFileSync(path.join(root, "src/data.ts"), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.ESNext },
+  })
+  .outputText.replace(
+    /from ["']\.\/domain["']/g,
+    "from " + JSON.stringify(domainURL),
+  );
 const data = await import(
   "data:text/javascript;base64," + Buffer.from(code).toString("base64")
 );

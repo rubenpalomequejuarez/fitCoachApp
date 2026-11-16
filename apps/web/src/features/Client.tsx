@@ -15,11 +15,22 @@ import {
   Lightbulb,
   ExternalLink,
   Sprout,
+  PenLine,
 } from "lucide-react";
 import { Avatar, Back, Button, EmptyState, PageTitle } from "../components/ui";
 import { DAYS, FULL_DAYS, youtubeId } from "../data";
 import type { Client, Meal, Exercise } from "../types";
 import { useStore } from "../store";
+import { Activity, BarChart3 } from "lucide-react";
+import {
+  assignedExercises,
+  completionKey,
+  dateLabel,
+  today,
+  weekday,
+  trainingLoad,
+} from "../domain";
+import { SessionCheckIn } from "./Monitoring";
 export function DayStrip({
   day,
   onChange,
@@ -43,6 +54,7 @@ export function DayStrip({
         n.setDate(monday.getDate() + i);
         return (
           <button
+            type="button"
             key={d}
             className={day === i ? "selected" : ""}
             aria-pressed={day === i}
@@ -341,7 +353,8 @@ export function ExerciseCard({
       <div className="exercise-copy">
         <h3>{exercise.name}</h3>
         <p>
-          {exercise.sets} series × {exercise.reps} rep.
+          {exercise.sets} series × {exercise.reps}
+          {/^\d+$/.test(exercise.reps.trim()) ? " rep." : ""}
         </p>
         <span>
           {completed ? (
@@ -364,21 +377,46 @@ export function ExerciseCard({
 export function ExercisesView({
   client,
   onExercise,
+  initialDay,
 }: {
   client: Client;
   onExercise: (e: Exercise) => void;
+  initialDay?: number;
 }) {
-  const { data } = useStore();
-  const [day, setDay] = useState<number | null>(null);
-  const assigned = data.exercises.filter((e) =>
-    client.exerciseIds.includes(e.id),
-  );
+  const { data, setData } = useStore();
+  const [day, setDay] = useState<number | null>(initialDay ?? null);
+  const [checkIn, setCheckIn] = useState(false);
+  const assigned = assignedExercises(client);
   const days = [...new Set(assigned.map((e) => e.day))].sort((a, b) => a - b);
-  const selected = day !== null && days.includes(day) ? day : days[0];
+  const selected =
+    day !== null && days.includes(day)
+      ? day
+      : days.includes(weekday(today()))
+        ? weekday(today())
+        : days[0];
   const list = assigned.filter((e) => e.day === selected);
   const done = list.filter(
-    (e) => data.completed[`${client.id}:${e.id}`],
+    (e) => data.completed[completionKey(client.id, e.id)],
   ).length;
+  const log = data.sessionLogs.find(
+    (s) =>
+      s.clientId === client.id &&
+      s.date === today() &&
+      s.routineDay === selected &&
+      !s.isDemo,
+  );
+  const recent = data.sessionLogs
+    .filter((s) => s.clientId === client.id && !s.isDemo)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 3);
+  function toggleAll() {
+    setData((d) => {
+      const completed = { ...d.completed };
+      for (const e of list)
+        completed[completionKey(client.id, e.id)] = done !== list.length;
+      return { ...d, completed };
+    });
+  }
   return (
     <>
       <PageTitle
@@ -404,6 +442,7 @@ export function ExercisesView({
             <div className="routine-tabs">
               {days.map((d, i) => (
                 <button
+                  type="button"
                   key={d}
                   className={selected === d ? "active" : ""}
                   onClick={() => setDay(d)}
@@ -431,7 +470,7 @@ export function ExercisesView({
               </span>
             </div>
             <div className="progress-row">
-              <span>Tu progreso de hoy</span>
+              <span>Completados hoy · {dateLabel(today())}</span>
               <strong>
                 {done} de {list.length}
               </strong>
@@ -439,16 +478,76 @@ export function ExercisesView({
             <div className="progress-track">
               <span style={{ width: `${(done / list.length) * 100}%` }} />
             </div>
+            <button
+              type="button"
+              className="text-link mark-all"
+              onClick={toggleAll}
+            >
+              <CheckCheck size={15} />
+              {done === list.length
+                ? "Desmarcar esta rutina"
+                : "Marcar todos como completados"}
+            </button>
             <div className="exercise-list">
               {list.map((e) => (
                 <ExerciseCard
                   key={e.id}
                   exercise={e}
-                  completed={data.completed[`${client.id}:${e.id}`]}
+                  completed={data.completed[completionKey(client.id, e.id)]}
                   onClick={() => onExercise(e)}
                 />
               ))}
             </div>
+            <div className={`session-checkin-card ${log ? "recorded" : ""}`}>
+              <span className="checkin-icon">
+                {log ? <CheckCheck size={25} /> : <Activity size={25} />}
+              </span>
+              <div>
+                <span className="eyebrow">
+                  {log ? "GRACIAS POR COMPARTIRLO" : "AL TERMINAR, CUÉNTANOS"}
+                </span>
+                <h3>
+                  {log
+                    ? "Tu sesión ya está registrada"
+                    : "¿Cómo te has sentido hoy?"}
+                </h3>
+                <p>
+                  {log
+                    ? `RPE ${log.rpe}/10 · ${log.duration} min · ${trainingLoad(log)} u.a.`
+                    : "Un minuto para valorar el esfuerzo de la sesión y ayudar a tu entrenadora a acompañarte mejor."}
+                </p>
+                <Button
+                  variant={log ? "secondary" : "primary"}
+                  disabled={!done && !log}
+                  onClick={() => setCheckIn(true)}
+                  icon={log ? <PenLine size={16} /> : <Activity size={16} />}
+                >
+                  {log ? "Editar valoración" : "Finalizar y valorar sesión"}
+                </Button>
+                {!done && !log && (
+                  <small>
+                    Marca los ejercicios que has realizado para finalizar.
+                  </small>
+                )}
+              </div>
+            </div>
+            {recent.length > 0 && (
+              <div className="client-session-history">
+                <h3>Tus últimas valoraciones</h3>
+                {recent.map((s) => (
+                  <div key={s.id}>
+                    <span>
+                      {dateLabel(s.date)}
+                      <small>{s.routineName}</small>
+                    </span>
+                    <strong>
+                      RPE {s.rpe}
+                      <small>{s.duration} min</small>
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
           <aside className="wellness-sidebar">
             <div className="coach-note">
@@ -476,12 +575,25 @@ export function ExercisesView({
             <div className="note-box">
               <Lightbulb size={21} />
               <div>
-                <h3>Antes de empezar</h3>
-                <p>Revisa la técnica y los consejos de cada ejercicio.</p>
+                <h3>Un esfuerzo que se entiende</h3>
+                <p>
+                  Al finalizar, valora la sesión completa de 0 a 10 e indica
+                  cuánto ha durado. Tus sensaciones también forman parte del
+                  progreso.
+                </p>
               </div>
             </div>
           </aside>
         </div>
+      )}
+      {checkIn && (
+        <SessionCheckIn
+          client={client}
+          exercises={list}
+          routineDay={selected}
+          onClose={() => setCheckIn(false)}
+          onSaved={() => setCheckIn(false)}
+        />
       )}
     </>
   );
@@ -500,7 +612,7 @@ export function ExerciseDetail({
   onEdit?: () => void;
 }) {
   const { data, setData, notify } = useStore();
-  const key = `${clientId}:${exercise.id}`;
+  const key = completionKey(clientId, exercise.id);
   const completed = !!data.completed[key];
   const id = youtubeId(exercise.url);
   return (
@@ -594,7 +706,11 @@ export function ExerciseDetail({
             </div>
           </div>
           {trainer ? (
-            <Button onClick={onEdit}>Editar ejercicio</Button>
+            <Button onClick={onEdit}>
+              {exercise.sourceId
+                ? "Adaptar solo para este cliente"
+                : "Editar original de biblioteca"}
+            </Button>
           ) : (
             <label className={`complete-control ${completed ? "checked" : ""}`}>
               <input

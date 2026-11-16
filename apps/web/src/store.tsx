@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { AppData } from "./types";
 import { initialData } from "./data";
+import { normalizeData } from "./domain";
 const STORAGE = "fitcoach-prototype-v1";
 const Store = createContext<{
   data: AppData;
@@ -21,16 +22,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           Array.isArray(p.exercises) &&
           p.completed
         )
-          return p;
+          return normalizeData(p, initialData);
       }
     } catch {}
-    return structuredClone(initialData);
+    return normalizeData(structuredClone(initialData), initialData);
   });
   const [toast, setToast] = useState("");
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE, JSON.stringify(data));
-    } catch {}
+    } catch {
+      setToast(
+        "No queda espacio para guardar en este navegador. Exporta tus datos antes de cerrar la página.",
+      );
+    }
   }, [data]);
   useEffect(() => {
     if (toast) {
@@ -46,7 +51,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         notify: setToast,
         toast,
         reset: () => {
-          setData(structuredClone(initialData));
+          setData(normalizeData(structuredClone(initialData), initialData));
           setToast("Datos de demostración restablecidos");
         },
       }}

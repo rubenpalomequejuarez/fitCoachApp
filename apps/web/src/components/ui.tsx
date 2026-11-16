@@ -42,7 +42,7 @@ export function Button({
   icon?: ReactNode;
 }) {
   return (
-    <button className={`button button-${variant}`} {...props}>
+    <button type="button" className={`button button-${variant}`} {...props}>
       {icon}
       {children}
     </button>
@@ -84,17 +84,28 @@ export function Field({
 export function TextArea({
   label,
   hint,
+  error,
   ...props
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label: string;
   hint?: string;
+  error?: string;
 }) {
   const id = useId();
   return (
-    <div className="field">
+    <div className={`field ${error ? "field-error" : ""}`}>
       <label htmlFor={id}>{label}</label>
-      <textarea id={id} {...props} />
-      {hint && <small>{hint}</small>}
+      <textarea
+        id={id}
+        aria-invalid={!!error}
+        aria-describedby={error || hint ? `${id}-hint` : undefined}
+        {...props}
+      />
+      {(error || hint) && (
+        <small id={`${id}-hint`} role={error ? "alert" : undefined}>
+          {error || hint}
+        </small>
+      )}
     </div>
   );
 }

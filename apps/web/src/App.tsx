@@ -37,11 +37,13 @@ import {
 import {
   ClientsView,
   ClientProfile,
-  ExerciseLibrary,
   ExerciseForm,
   DietsView,
   DietEditor,
 } from "./features/Trainer";
+import { ExerciseCatalogue, MealLibrary } from "./features/Library";
+import { ProgressView } from "./features/Monitoring";
+import { assignedExercises } from "./domain";
 type Route = { page: string; id?: string };
 export default function App() {
   const { data, toast, notify, reset } = useStore();
@@ -56,6 +58,9 @@ export default function App() {
   const [assignClient, setAssignClient] = useState<string | undefined>();
   const [returnRoute, setReturnRoute] = useState<Route>({ page: "exercises" });
   const [notifications, setNotifications] = useState(false);
+  const [detailOwnerId, setDetailOwnerId] = useState<string | undefined>();
+  const [libraryTarget, setLibraryTarget] = useState<string | undefined>();
+  const [exerciseDay, setExerciseDay] = useState<number | undefined>();
   const client = data.clients.find((c) => c.id === clientId) || data.clients[0];
   function go(page: string, id?: string) {
     setRoute({ page, id });
@@ -98,13 +103,20 @@ export default function App() {
     go("exercise-form");
   }
   const selectedClient = data.clients.find((c) => c.id === route.id);
-  const exercise = data.exercises.find((e) => e.id === route.id);
+  const detailOwner = data.clients.find((c) => c.id === detailOwnerId);
+  const exercise = (
+    role === "client"
+      ? assignedExercises(client)
+      : detailOwner
+        ? assignedExercises(detailOwner)
+        : data.exercises
+  ).find((e) => e.id === route.id);
   const active =
     role === "client"
       ? route.page.startsWith("exercise")
         ? "exercises"
         : "diet"
-      : route.page.startsWith("diet")
+      : route.page.startsWith("diet") || route.page === "meal-library"
         ? "diets"
         : route.page.startsWith("exercise")
           ? "exercises"
@@ -124,7 +136,11 @@ export default function App() {
     ) : route.page === "exercises" ? (
       <ExercisesView
         client={client}
-        onExercise={(e) => go("exercise-detail", e.id)}
+        initialDay={exerciseDay}
+        onExercise={(e) => {
+          setExerciseDay(e.day);
+          go("exercise-detail", e.id);
+        }}
       />
     ) : (
       <DietView client={client} onMeal={setMeal} />
@@ -135,20 +151,57 @@ export default function App() {
         <ClientProfile
           client={selectedClient}
           onBack={() => go("clients")}
-          onExerciseEdit={(e) => openExerciseForm(e, selectedClient.id)}
+          onExerciseEdit={(e) => {
+            if (e) {
+              openExerciseForm(e, selectedClient.id);
+            } else {
+              setLibraryTarget(selectedClient.id);
+              setReturnRoute(route);
+              go("exercise-picker");
+            }
+          }}
           onDietEdit={() => go("diet-editor", selectedClient.id)}
+          onProgress={() => go("progress", selectedClient.id)}
           onExercise={(e) => {
             setReturnRoute(route);
+            setDetailOwnerId(selectedClient.id);
             go("exercise-detail", e.id);
           }}
         />
-      ) : route.page === "exercises" ? (
-        <ExerciseLibrary
-          onCreate={() => openExerciseForm()}
+      ) : route.page === "progress" ? (
+        <ProgressView
+          client={selectedClient || data.clients[0]}
+          onBack={() => go("client", selectedClient?.id || data.clients[0].id)}
+          onClientChange={(id) => go("progress", id)}
+        />
+      ) : route.page === "exercises" || route.page === "exercise-picker" ? (
+        <ExerciseCatalogue
+          onCreate={(e) =>
+            openExerciseForm(
+              e,
+              route.page === "exercise-picker" && !e
+                ? libraryTarget
+                : undefined,
+            )
+          }
           onExercise={(e) => {
+            setDetailOwnerId(undefined);
             setReturnRoute(route);
             go("exercise-detail", e.id);
           }}
+          initialClientId={
+            route.page === "exercise-picker" ? libraryTarget : undefined
+          }
+          onBack={
+            route.page === "exercise-picker"
+              ? () => go("client", libraryTarget)
+              : undefined
+          }
+          onAssigned={
+            route.page === "exercise-picker"
+              ? () => go("client", libraryTarget)
+              : undefined
+          }
         />
       ) : route.page === "exercise-form" ? (
         <ExerciseForm
@@ -161,13 +214,18 @@ export default function App() {
       ) : route.page === "exercise-detail" && exercise ? (
         <ExerciseDetail
           exercise={exercise}
-          clientId={client.id}
+          clientId={detailOwner?.id || client.id}
           trainer
           onBack={() => go(returnRoute.page, returnRoute.id)}
-          onEdit={() => openExerciseForm(exercise)}
+          onEdit={() => openExerciseForm(exercise, detailOwner?.id)}
         />
       ) : route.page === "diets" ? (
-        <DietsView onEdit={(id) => go("diet-editor", id)} />
+        <DietsView
+          onEdit={(id) => go("diet-editor", id)}
+          onLibrary={() => go("meal-library")}
+        />
+      ) : route.page === "meal-library" ? (
+        <MealLibrary onBack={() => go("diets")} onPlans={() => go("diets")} />
       ) : route.page === "diet-editor" && selectedClient ? (
         <DietEditor
           key={selectedClient.id}
@@ -481,18 +539,6 @@ function DesignSystem({ onClose }: { onClose: () => void }) {
           Radio 16 px. Iconos Lucide de trazo fino.
           <br />
           Auto-layout mediante Flexbox y Grid en el prototipo.
-        </p>
-        <h4>Para desarrollar y editar</h4>
-        <p>
-          <a className="text-link" href="/fitcoach-figma-kit.zip" download>
-            Descargar kit editable para Figma
-            <ArrowRight size={14} />
-          </a>
-          <br />
-          <a className="text-link" href="/fitcoach-source.zip" download>
-            Descargar código del prototipo
-            <ArrowRight size={14} />
-          </a>
         </p>
         <h4>Interacciones accesibles</h4>
         <p>

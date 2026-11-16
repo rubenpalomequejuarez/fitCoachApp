@@ -1,10 +1,12 @@
 # FitCoach · Kit editable para Figma
 
-Este paquete contiene un generador local de capas, variables, componentes con variantes y conexiones de prototipo. No es un archivo `.fig` ya creado. No se ha ejecutado ni verificado dentro de Figma en esta sesión: el servicio bloqueó la construcción por el límite de llamadas del plan Starter. El generador local no utiliza esas llamadas MCP.
+Este paquete contiene un generador local de capas, variables, componentes con variantes y conexiones de prototipo. No es un archivo `.fig` ya creado: hay que ejecutarlo dentro de Figma para generar el diseño.
+
+El kit corresponde a los flujos de la entrega inicial. La ampliación web con rutinas reutilizables, biblioteca de platos, copias independientes y seguimiento RPE todavía no está trasladada al generador de Figma.
 
 ## Crear el diseño
 
-1. Abre Figma Desktop y un archivo Design vacío. También puedes usar el [archivo de trabajo iniciado](https://www.figma.com/design/qIEphA1fJydUAP26mbTSQm), que actualmente contiene solo cinco fotografías de referencia; todavía no contiene las pantallas ni las variables.
+1. Abre Figma Desktop y un archivo Design vacío.
 2. En el menú de plugins, elige **Development → New plugin** y crea un plugin vacío que se ejecute una vez (**Run once**). Figma generará un `manifest.json` con tu propio ID. Conserva ese ID: no necesitas publicar el plugin.
 3. Sustituye el archivo `code.js` generado por el `code.js` de este paquete. No requiere compilación, dependencias ni acceso a internet.
 4. En tu `manifest.json`, conserva el `id` de Figma y utiliza los demás campos de `manifest.template.json`. No importes directamente la plantilla sin ID.
